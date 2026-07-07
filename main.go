@@ -23,9 +23,12 @@ func StartEchoServer(port string) error {
 	defer listener.Close()
 
 	conn, err := listener.Accept()
+
 	if err != nil {
 		return err
 	}
+
+	defer conn.Close()
 
 	scanner := bufio.NewScanner(conn)
 
