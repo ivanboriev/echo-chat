@@ -9,10 +9,10 @@ import (
 )
 
 type ChatMessage struct {
-	Timestamp    time.Time
-	ClientID     string
-	Content      string
-	MessaageType string
+	Timestamp   time.Time
+	ClientID    string
+	Content     string
+	MessageType string
 }
 
 func main() {
@@ -22,20 +22,19 @@ func main() {
 func FormatMessage(msg ChatMessage) string {
 	timeStr := msg.Timestamp.Format("15:04:05")
 
-	if msg.MessaageType == "user" {
+	if msg.MessageType == "user" {
 		return fmt.Sprintf("[%s] <%s>: %s", timeStr, msg.ClientID, msg.Content)
 	}
 
 	return fmt.Sprintf("[%s] *** %s", timeStr, msg.Content)
-
 }
 
 func ParseIncomingMessage(raw string, senderID string) ChatMessage {
 	return ChatMessage{
-		Timestamp:    time.Now(),
-		ClientID:     senderID,
-		Content:      raw,
-		MessaageType: "user",
+		Timestamp:   time.Now(),
+		ClientID:    senderID,
+		Content:     raw,
+		MessageType: "user",
 	}
 
 }
@@ -63,7 +62,7 @@ func StartEchoServer(port string) error {
 
 	for scanner.Scan() {
 		msg := ParseIncomingMessage(scanner.Text(), "Ivan Boriev")
-		conn.Write([]byte(formatMessage(msg) + "\n"))
+		conn.Write([]byte(FormatMessage(msg) + "\n"))
 	}
 
 	if err := scanner.Err(); err != nil {
