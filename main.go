@@ -109,7 +109,7 @@ func HandleClient(client *Client, h *Hub) error {
 			MessageType: "user",
 		}
 
-		h.BroadcastMessage(msg)
+		h.broadcast <- msg
 	}
 
 	defer client.Conn.Close()
