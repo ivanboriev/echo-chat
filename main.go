@@ -25,6 +25,62 @@ type Client struct {
 	JoinTime time.Time
 }
 
+type Hub struct {
+	clients    map[string]*Client
+	broadcast  chan ChatMessage
+	register   chan *Client
+	unregister chan *Client
+}
+
+func NewHub() *Hub {
+	return &Hub{
+		clients:    make(map[string]*Client),
+		broadcast:  make(chan ChatMessage),
+		register:   make(chan *Client),
+		unregister: make(chan *Client),
+	}
+}
+
+func (h *Hub) BroadcastMessage(msg ChatMessage) {
+	formatted := FormatMessage(msg)
+
+	for id, client := range h.clients {
+
+		if id == msg.ClientID {
+			continue
+		}
+
+		_, err := client.Conn.Write([]byte(formatted + "\n"))
+		if err != nil {
+			log.Printf("ошибка записи клиенту %s: %v", id, err)
+			select {
+			case h.unregister <- client:
+			default:
+				log.Printf("не удалось отправить клиента %s в unregister (канал занят)", id)
+			}
+		}
+	}
+}
+
+func (h *Hub) Run() {
+	for {
+		select {
+		case client := <-h.register:
+			h.clients[client.ID] = client
+			log.Printf("клиент %s зарегистрирован", client.ID)
+
+		case client := <-h.unregister:
+			if _, ok := h.clients[client.ID]; ok {
+				delete(h.clients, client.ID)
+				log.Printf("клиент %s удалён", client.ID)
+			}
+
+		case msg := <-h.broadcast:
+			h.BroadcastMessage(msg)
+		}
+	}
+}
+
 func main() {
 	StartEchoServer("8080")
 }
@@ -33,7 +89,15 @@ func GenerateClientID() string {
 	return "User_" + uuid.New().String()
 }
 
-func HandleClient(client *Client) error {
+func HandleClient(client *Client, h *Hub) error {
+
+	h.register <- client
+
+	defer func() {
+		h.unregister <- client
+		log.Printf("клиент %s отключён", client.ID)
+	}()
+
 	scanner := bufio.NewScanner(client.Conn)
 
 	for scanner.Scan() {
@@ -45,9 +109,7 @@ func HandleClient(client *Client) error {
 			MessageType: "user",
 		}
 
-		formatedd := FormatMessage(msg)
-
-		fmt.Println(formatedd)
+		h.BroadcastMessage(msg)
 	}
 
 	defer client.Conn.Close()
@@ -55,9 +117,11 @@ func HandleClient(client *Client) error {
 	if err := scanner.Err(); err != nil {
 		// Если ошибка – это EOF, значит клиент корректно закрыл соединение.
 		if errors.Is(err, io.EOF) {
+			h.unregister <- client
 			log.Printf("Клиент %s отключился штатно", client.ID)
 			return nil
 		}
+		h.unregister <- client
 		// Иначе возвращаем ошибку для обработки вызывающим кодом.
 		log.Printf("Клиент %s отключился с ошибкой: %v", client.ID, err)
 	}
@@ -92,6 +156,9 @@ func StartEchoServer(port string) error {
 
 	defer listener.Close()
 
+	hub := NewHub()
+	go hub.Run()
+
 	fmt.Printf("TCP Echo Server listening on :%s\n", port)
 	fmt.Println("Waiting for connections")
 
@@ -108,7 +175,7 @@ func StartEchoServer(port string) error {
 			JoinTime: time.Now(),
 		}
 
-		go HandleClient(client)
+		go HandleClient(client, hub)
 
 	}
 
