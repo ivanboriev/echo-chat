@@ -98,8 +98,6 @@ func StartEchoServer(port string) error {
 			return err
 		}
 
-		defer conn.Close()
-
 		client := &Client{
 			ID:       GenerateClientID(),
 			Conn:     conn,
@@ -108,8 +106,10 @@ func StartEchoServer(port string) error {
 
 		if err := HandleClient(client); err != nil {
 			log.Printf("Клиент %s отключился с ошибкой: %v", client.ID, err)
+			conn.Close()
 		} else {
 			log.Printf("Клиент %s отключился штатно", client.ID)
+			conn.Close()
 		}
 
 	}
