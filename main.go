@@ -8,18 +8,11 @@ import (
 	"time"
 )
 
-type MessageType int
-
-const (
-	User MessageType = iota + 1
-	System
-)
-
 type ChatMessage struct {
 	Timestamp    time.Time
 	ClientID     string
 	Content      string
-	MessaageType MessageType
+	MessaageType string
 }
 
 func main() {
@@ -29,7 +22,7 @@ func main() {
 func formatMessage(msg ChatMessage) string {
 	timeStr := msg.Timestamp.Format("15:04:05")
 
-	if msg.MessaageType == User {
+	if msg.MessaageType == "user" {
 		return fmt.Sprintf("[%s] <%s> %s", timeStr, msg.ClientID, msg.Content)
 	}
 
@@ -42,7 +35,7 @@ func ParseIncomingMessage(raw string, senderID string) ChatMessage {
 		Timestamp:    time.Now(),
 		ClientID:     senderID,
 		Content:      raw,
-		MessaageType: User,
+		MessaageType: "user",
 	}
 
 }
