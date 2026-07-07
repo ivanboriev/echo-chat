@@ -2,10 +2,14 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type ChatMessage struct {
@@ -15,8 +19,45 @@ type ChatMessage struct {
 	MessageType string
 }
 
+type Client struct {
+	ID       string
+	Conn     net.Conn
+	JoinTime time.Time
+}
+
 func main() {
 	StartEchoServer("8080")
+}
+
+func GenerateClientID() string {
+	return "User_" + uuid.New().String()
+}
+
+func HandleClient(client *Client) error {
+	scanner := bufio.NewScanner(client.Conn)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		msg := ChatMessage{
+			Timestamp:   time.Now(),
+			ClientID:    client.ID,
+			Content:     line,
+			MessageType: "user",
+		}
+
+		formatedd := FormatMessage(msg)
+
+		fmt.Println(formatedd)
+	}
+	if err := scanner.Err(); err != nil {
+		// Если ошибка – это EOF, значит клиент корректно закрыл соединение.
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		// Иначе возвращаем ошибку для обработки вызывающим кодом.
+		return fmt.Errorf("ошибка сканирования: %w", err)
+	}
+	return nil
 }
 
 func FormatMessage(msg ChatMessage) string {
@@ -58,15 +99,16 @@ func StartEchoServer(port string) error {
 
 	defer conn.Close()
 
-	scanner := bufio.NewScanner(conn)
-
-	for scanner.Scan() {
-		msg := ParseIncomingMessage(scanner.Text(), "Ivan Boriev")
-		conn.Write([]byte(FormatMessage(msg) + "\n"))
+	client := &Client{
+		ID:       GenerateClientID(),
+		Conn:     conn,
+		JoinTime: time.Now(),
 	}
 
-	if err := scanner.Err(); err != nil {
-		log.Fatalf("scanning failed: %v", err)
+	if err := HandleClient(client); err != nil {
+		log.Printf("Клиент %s отключился с ошибкой: %v", client.ID, err)
+	} else {
+		log.Printf("Клиент %s отключился штатно", client.ID)
 	}
 
 	return nil
