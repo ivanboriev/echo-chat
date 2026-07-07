@@ -91,25 +91,27 @@ func StartEchoServer(port string) error {
 	fmt.Printf("TCP Echo Server listening on :%s\n", port)
 	fmt.Println("Waiting for connections")
 
-	conn, err := listener.Accept()
+	for {
+		conn, err := listener.Accept()
 
-	if err != nil {
-		return err
+		if err != nil {
+			return err
+		}
+
+		defer conn.Close()
+
+		client := &Client{
+			ID:       GenerateClientID(),
+			Conn:     conn,
+			JoinTime: time.Now(),
+		}
+
+		if err := HandleClient(client); err != nil {
+			log.Printf("Клиент %s отключился с ошибкой: %v", client.ID, err)
+		} else {
+			log.Printf("Клиент %s отключился штатно", client.ID)
+		}
+
 	}
 
-	defer conn.Close()
-
-	client := &Client{
-		ID:       GenerateClientID(),
-		Conn:     conn,
-		JoinTime: time.Now(),
-	}
-
-	if err := HandleClient(client); err != nil {
-		log.Printf("Клиент %s отключился с ошибкой: %v", client.ID, err)
-	} else {
-		log.Printf("Клиент %s отключился штатно", client.ID)
-	}
-
-	return nil
 }
