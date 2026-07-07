@@ -49,13 +49,17 @@ func HandleClient(client *Client) error {
 
 		fmt.Println(formatedd)
 	}
+
+	defer client.Conn.Close()
+
 	if err := scanner.Err(); err != nil {
 		// Если ошибка – это EOF, значит клиент корректно закрыл соединение.
 		if errors.Is(err, io.EOF) {
+			log.Printf("Клиент %s отключился штатно", client.ID)
 			return nil
 		}
 		// Иначе возвращаем ошибку для обработки вызывающим кодом.
-		return fmt.Errorf("ошибка сканирования: %w", err)
+		log.Printf("Клиент %s отключился с ошибкой: %v", client.ID, err)
 	}
 	return nil
 }
@@ -104,13 +108,7 @@ func StartEchoServer(port string) error {
 			JoinTime: time.Now(),
 		}
 
-		if err := HandleClient(client); err != nil {
-			log.Printf("Клиент %s отключился с ошибкой: %v", client.ID, err)
-			conn.Close()
-		} else {
-			log.Printf("Клиент %s отключился штатно", client.ID)
-			conn.Close()
-		}
+		go HandleClient(client)
 
 	}
 
