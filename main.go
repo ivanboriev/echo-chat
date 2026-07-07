@@ -19,11 +19,11 @@ func main() {
 	StartEchoServer("8080")
 }
 
-func formatMessage(msg ChatMessage) string {
+func FormatMessage(msg ChatMessage) string {
 	timeStr := msg.Timestamp.Format("15:04:05")
 
 	if msg.MessaageType == "user" {
-		return fmt.Sprintf("[%s] <%s> %s", timeStr, msg.ClientID, msg.Content)
+		return fmt.Sprintf("[%s] <%s>: %s", timeStr, msg.ClientID, msg.Content)
 	}
 
 	return fmt.Sprintf("[%s] *** %s", timeStr, msg.Content)
