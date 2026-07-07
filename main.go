@@ -5,10 +5,46 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"time"
 )
+
+type MessageType int
+
+const (
+	User MessageType = iota + 1
+	System
+)
+
+type ChatMessage struct {
+	Timestamp    time.Time
+	ClientID     string
+	Content      string
+	MessaageType MessageType
+}
 
 func main() {
 	StartEchoServer("8080")
+}
+
+func formatMessage(msg ChatMessage) string {
+	timeStr := msg.Timestamp.Format("15:04:05")
+
+	if msg.MessaageType == User {
+		return fmt.Sprintf("[%s] <%s> %s", timeStr, msg.ClientID, msg.Content)
+	}
+
+	return fmt.Sprintf("[%s] *** %s", timeStr, msg.Content)
+
+}
+
+func ParseIncomingMessage(raw string, senderID string) ChatMessage {
+	return ChatMessage{
+		Timestamp:    time.Now(),
+		ClientID:     senderID,
+		Content:      raw,
+		MessaageType: User,
+	}
+
 }
 
 func StartEchoServer(port string) error {
@@ -17,10 +53,10 @@ func StartEchoServer(port string) error {
 		return err
 	}
 
+	defer listener.Close()
+
 	fmt.Printf("TCP Echo Server listening on :%s\n", port)
 	fmt.Println("Waiting for connections")
-
-	defer listener.Close()
 
 	conn, err := listener.Accept()
 
@@ -33,7 +69,8 @@ func StartEchoServer(port string) error {
 	scanner := bufio.NewScanner(conn)
 
 	for scanner.Scan() {
-		conn.Write([]byte(scanner.Text() + "\n"))
+		msg := ParseIncomingMessage(scanner.Text(), "Ivan Boriev")
+		conn.Write([]byte(formatMessage(msg) + "\n"))
 	}
 
 	if err := scanner.Err(); err != nil {
