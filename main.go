@@ -33,6 +33,7 @@ type HubRequest struct {
 const (
 	ActionListClients = "list_clients"
 	ActionClientCount = "client_count"
+	ConnectionTimeout = 5
 )
 
 type Hub struct {
@@ -85,6 +86,38 @@ func (h *Hub) GetClientCount() int {
 	return (<-resp).(int)
 }
 
+func (h *Hub) setupClientConnection(conn net.Conn) *Client {
+	client := &Client{
+		ID:       GenerateClientID(),
+		Conn:     conn,
+		JoinTime: time.Now(),
+	}
+	err := client.Conn.SetReadDeadline(time.Now().Add(ConnectionTimeout * time.Second))
+	if err != nil {
+		return nil
+	}
+	_, err = client.Conn.Write([]byte("Hello" + client.ID))
+
+	if err != nil {
+		return nil
+	}
+	return client
+}
+
+func (h *Hub) cleanupClient(client *Client) {
+	err := client.Conn.Close()
+	if err != nil {
+		return
+	}
+	h.unregister <- client
+	h.broadcast <- ChatMessage{
+		Timestamp:   time.Now(),
+		ClientID:    client.ID,
+		Content:     fmt.Sprintf("Клиен %s отключился от сервера", client.ID),
+		MessageType: "system",
+	}
+}
+
 func (h *Hub) Run() {
 	for {
 		select {
@@ -120,12 +153,12 @@ func GenerateClientID() string {
 	return "User_" + uuid.New().String()
 }
 
-func HandleClient(client *Client, h *Hub) error {
+func handleClientMessages(client *Client, h *Hub) error {
 
 	h.register <- client
 
 	defer func() {
-		h.unregister <- client
+		h.cleanupClient(client)
 		log.Printf("клиент %s отключён", client.ID)
 	}()
 
@@ -135,6 +168,10 @@ func HandleClient(client *Client, h *Hub) error {
 		line := scanner.Text()
 		msg := ParseIncomingMessage(line, client.ID)
 		h.broadcast <- msg
+		err := client.Conn.SetReadDeadline(time.Now().Add(ConnectionTimeout * time.Second))
+		if err != nil {
+			log.Printf("Ошибка обновления таймаута клиента: %s - %s ", client.ID, err)
+		}
 	}
 
 	defer func(Conn net.Conn) {
@@ -204,14 +241,10 @@ func StartEchoServer(port string) error {
 			return err
 		}
 
-		client := &Client{
-			ID:       GenerateClientID(),
-			Conn:     conn,
-			JoinTime: time.Now(),
-		}
+		client := hub.setupClientConnection(conn)
 
 		go func() {
-			err := HandleClient(client, hub)
+			err := handleClientMessages(client, hub)
 			if err != nil {
 				log.Printf("Ошибка обработки клиентов: %s", err)
 			}
