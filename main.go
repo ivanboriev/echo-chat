@@ -25,11 +25,22 @@ type Client struct {
 	JoinTime time.Time
 }
 
+type HubRequest struct {
+	Action   string
+	Response chan interface{}
+}
+
+const (
+	ActionListClients = "list_clients"
+	ActionClientCount = "client_count"
+)
+
 type Hub struct {
 	clients    map[string]*Client
 	broadcast  chan ChatMessage
 	register   chan *Client
 	unregister chan *Client
+	requests   chan HubRequest
 }
 
 func NewHub() *Hub {
@@ -38,6 +49,7 @@ func NewHub() *Hub {
 		broadcast:  make(chan ChatMessage),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
+		requests:   make(chan HubRequest),
 	}
 }
 
@@ -61,28 +73,47 @@ func (h *Hub) BroadcastMessage(msg ChatMessage) {
 		}
 	}
 }
+func (h *Hub) GetActiveClients() []string {
+	resp := make(chan interface{})
+	h.requests <- HubRequest{Action: ActionListClients, Response: resp}
+	return (<-resp).([]string)
+}
+
+func (h *Hub) GetClientCount() int {
+	resp := make(chan interface{})
+	h.requests <- HubRequest{Action: ActionClientCount, Response: resp}
+	return (<-resp).(int)
+}
 
 func (h *Hub) Run() {
 	for {
 		select {
 		case client := <-h.register:
 			h.clients[client.ID] = client
-			log.Printf("клиент %s зарегистрирован", client.ID)
+			log.Printf("Client %s connected. Total: %d", client.ID, len(h.clients))
 
 		case client := <-h.unregister:
 			if _, ok := h.clients[client.ID]; ok {
 				delete(h.clients, client.ID)
-				log.Printf("клиент %s удалён", client.ID)
+				log.Printf("Client %s disconnected. Total: %d", client.ID, len(h.clients))
 			}
 
 		case msg := <-h.broadcast:
 			h.BroadcastMessage(msg)
+
+		case req := <-h.requests:
+			switch req.Action {
+			case ActionListClients:
+				var clients []string
+				for id := range h.clients {
+					clients = append(clients, id)
+				}
+				req.Response <- clients
+			case ActionClientCount:
+				req.Response <- len(h.clients)
+			}
 		}
 	}
-}
-
-func main() {
-	StartEchoServer("8080")
 }
 
 func GenerateClientID() string {
@@ -102,17 +133,16 @@ func HandleClient(client *Client, h *Hub) error {
 
 	for scanner.Scan() {
 		line := scanner.Text()
-		msg := ChatMessage{
-			Timestamp:   time.Now(),
-			ClientID:    client.ID,
-			Content:     line,
-			MessageType: "user",
-		}
-
+		msg := ParseIncomingMessage(line, client.ID)
 		h.broadcast <- msg
 	}
 
-	defer client.Conn.Close()
+	defer func(Conn net.Conn) {
+		err := Conn.Close()
+		if err != nil {
+			log.Printf("Ошибка закрытия соединения: %s", err)
+		}
+	}(client.Conn)
 
 	if err := scanner.Err(); err != nil {
 		// Если ошибка – это EOF, значит клиент корректно закрыл соединение.
@@ -154,12 +184,17 @@ func StartEchoServer(port string) error {
 		return err
 	}
 
-	defer listener.Close()
+	defer func(listener net.Listener) {
+		err := listener.Close()
+		if err != nil {
+			log.Printf("Ошибка закрытия сервера: %s", err)
+		}
+	}(listener)
 
 	hub := NewHub()
 	go hub.Run()
 
-	fmt.Printf("TCP Echo Server listening on :%s\n", port)
+	fmt.Printf("TCP Chat Server listening on :%s\n", port)
 	fmt.Println("Waiting for connections")
 
 	for {
@@ -175,7 +210,19 @@ func StartEchoServer(port string) error {
 			JoinTime: time.Now(),
 		}
 
-		go HandleClient(client, hub)
+		go func() {
+			err := HandleClient(client, hub)
+			if err != nil {
+				log.Printf("Ошибка обработки клиентов: %s", err)
+			}
+		}()
+
+	}
+}
+
+func main() {
+	err := StartEchoServer("8080")
+	if err != nil {
 
 	}
 
