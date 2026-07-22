@@ -6,7 +6,7 @@ type MessageHistory struct {
 	size   int
 }
 
-func (mh *MessageHistory) NewMessageHistory(size int) *MessageHistory {
+func NewMessageHistory(size int) *MessageHistory {
 	return &MessageHistory{
 		buffer: make([]ChatMessage, size),
 		head:   0,

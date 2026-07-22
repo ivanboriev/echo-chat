@@ -29,6 +29,7 @@ func handleClientMessages(client *models.Client, h *Hub) error {
 			h.HandleCommand(client, line)
 		} else {
 			msg := ParseIncomingMessage(line, client.ID)
+			h.history.Add(msg)
 			h.broadcast <- msg
 		}
 

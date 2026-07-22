@@ -25,15 +25,17 @@ type Hub struct {
 	register   chan *models.Client
 	unregister chan *models.Client
 	requests   chan HubRequest
+	history    *models.MessageHistory
 }
 
 func NewHub() *Hub {
 	return &Hub{
-		clients:    make(map[string]*models.Client),
-		broadcast:  make(chan models.ChatMessage),
-		register:   make(chan *models.Client),
-		unregister: make(chan *models.Client),
-		requests:   make(chan HubRequest),
+		make(map[string]*models.Client),
+		make(chan models.ChatMessage),
+		make(chan *models.Client),
+		make(chan *models.Client),
+		make(chan HubRequest),
+		models.NewMessageHistory(50),
 	}
 }
 
