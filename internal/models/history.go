@@ -15,11 +15,10 @@ func (mh *MessageHistory) NewMessageHistory(size int) *MessageHistory {
 }
 
 func (mh *MessageHistory) Add(msg ChatMessage) {
-	if len(mh.buffer) == 50 {
-		mh.buffer = mh.buffer[1:]
-	}
-	mh.buffer = append(mh.buffer, msg)
+	mh.buffer[mh.head%mh.size] = msg
+	mh.head = mh.head + 1
 }
+
 func (mh *MessageHistory) GetRecent() []ChatMessage {
 	return mh.buffer
 }
