@@ -11,7 +11,7 @@ import (
 const (
 	ActionListClients = "list_clients"
 	ActionClientCount = "client_count"
-	ConnectionTimeout = 5
+	ConnectionTimeout = 30
 )
 
 type HubRequest struct {
@@ -67,6 +67,52 @@ func (h *Hub) GetClientCount() int {
 	resp := make(chan interface{})
 	h.requests <- HubRequest{Action: ActionClientCount, Response: resp}
 	return (<-resp).(int)
+}
+
+func (h *Hub) SendUserList(client *models.Client) {
+	ac := h.GetActiveClients()
+	activeClientsCount := len(ac)
+	msg := fmt.Sprintf("Online users (%d): ", activeClientsCount)
+
+	for i, c := range ac {
+		if i == activeClientsCount-1 {
+			msg = msg + c
+		} else {
+			msg = msg + c + ", "
+		}
+	}
+
+	formatted := FormatMessage(models.ChatMessage{
+		Timestamp:   time.Time{},
+		ClientID:    "system",
+		Content:     msg,
+		MessageType: "system",
+	})
+
+	_, err := client.Conn.Write([]byte(formatted + "\n"))
+	if err != nil {
+		log.Printf("ошибка записи клиенту %s: %v", client.ID, err)
+	}
+}
+
+func (h *Hub) HandleCommand(client *models.Client, command string) {
+	switch command {
+	case "/users":
+		h.SendUserList(client)
+	case "/help":
+		_, err := client.Conn.Write([]byte("Команды: /help, /users, /time, /quit \n"))
+		if err != nil {
+			log.Printf("ошибка записи клиенту %s: %v", client.ID, err)
+		}
+	case "/time":
+		_, err := client.Conn.Write([]byte(time.Now().String() + "\n"))
+		if err != nil {
+			log.Printf("ошибка записи клиенту %s: %v", client.ID, err)
+		}
+	case "/quit":
+		h.cleanupClient(client)
+
+	}
 }
 
 func (h *Hub) setupClientConnection(conn net.Conn) *models.Client {
